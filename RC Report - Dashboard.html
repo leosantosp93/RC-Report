@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RC Report — PampaTF Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  /* cursor:pointer on body is required for iOS Safari to fire click events on divs */
+  body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1F3864; cursor: pointer; }
+
+  header {
+    background: linear-gradient(135deg, #1F3864 0%, #2E75B6 100%);
+    color: white; padding: 24px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: .5px; }
+  header .subtitle { font-size: .85rem; opacity: .8; margin-top: 4px; }
+  header .updated { font-size: .8rem; opacity: .65; text-align: right; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px 20px; }
+
+  /* Filters */
+  .filters {
+    background: white; border-radius: 10px; padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+    margin-bottom: 24px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; position: relative; }
+  .filter-group label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #5A7FA8; }
+
+  /* Multi-select trigger button */
+  .ms-btn {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 10px; border: 1.5px solid #BDD7EE; border-radius: 6px;
+    font-size: .85rem; color: #1F3864; background: white;
+    cursor: pointer; min-width: 140px; user-select: none;
+    transition: border-color .15s;
+    /* iOS: prevents 300ms tap delay */
+    touch-action: manipulation;
+    -webkit-user-select: none;
+  }
+  .ms-btn:hover { border-color: #2E75B6; }
+  .ms-btn.active { border-color: #2E75B6; background: #F0F7FF; }
+  .ms-btn .ms-label { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+  .ms-btn .ms-count { background: #2E75B6; color: white; border-radius: 10px; font-size: .68rem; font-weight: 700; padding: 1px 6px; flex-shrink: 0; }
+  .ms-btn .ms-arrow { font-size: .6rem; color: #5A7FA8; flex-shrink: 0; transition: transform .15s; }
+  .ms-btn.active .ms-arrow { transform: rotate(180deg); }
+
+  /* Dropdown panel */
+  .ms-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+    background: white; border: 1.5px solid #BDD7EE; border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.12); min-width: 180px; max-width: min(260px, 90vw); max-height: 260px;
+    overflow-y: auto;
+  }
+  .ms-panel.open { display: block; }
+  .ms-panel-header {
+    display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #EBF3FA;
+    position: sticky; top: 0; background: white; z-index: 1;
+  }
+  .ms-panel-header button {
+    font-size: .72rem; padding: 4px 10px; border: 1px solid #BDD7EE; border-radius: 4px;
+    background: #F5F9FD; cursor: pointer; color: #1F3864; font-weight: 600;
+    touch-action: manipulation;
+  }
+  .ms-panel-header button:hover { background: #DAEEF9; }
+  .ms-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    font-size: .82rem; cursor: pointer; transition: background .1s;
+    touch-action: manipulation;
+  }
+  .ms-item:hover { background: #F0F7FF; }
+  .ms-item input[type=checkbox] { accent-color: #2E75B6; width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+  .ms-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+
+  .btn-reset {
+    padding: 7px 18px; background: #1F3864; color: white;
+    border: none; border-radius: 6px; font-size: .85rem; cursor: pointer;
+    font-weight: 600; align-self: flex-end; transition: background .2s;
+  }
+  .btn-reset:hover { background: #2E75B6; }
+  .filter-count { align-self: flex-end; font-size: .8rem; color: #5A7FA8; padding-bottom: 8px; }
+
+  /* KPIs */
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
+  .kpi-card {
+    background: white; border-radius: 10px; padding: 18px 16px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    border-top: 4px solid var(--accent);
+    text-align: center; transition: transform .15s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); }
+  .kpi-value { font-size: 1.7rem; font-weight: 700; color: var(--accent); line-height: 1.1; }
+  .kpi-label { font-size: .72rem; color: #5A7FA8; margin-top: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+
+  /* Charts row */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .charts-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-card {
+    background: white; border-radius: 10px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  }
+  .chart-card h3 { font-size: .85rem; font-weight: 700; color: #1F3864; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; border-bottom: 2px solid #DAEEF9; padding-bottom: 8px; }
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* Tables */
+  .table-card {
+    background: white; border-radius: 10px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 20px;
+  }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-card h3 { font-size: .85rem; font-weight: 700; color: #1F3864; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; border-bottom: 2px solid #DAEEF9; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .table-card h3 .badge { font-size: .75rem; background: #C00000; color: white; padding: 2px 10px; border-radius: 12px; font-weight: 700; letter-spacing: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  thead th { background: #1F3864; color: white; padding: 9px 10px; text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+  thead th:first-child { border-radius: 6px 0 0 0; }
+  thead th:last-child { border-radius: 0 6px 0 0; }
+  tbody tr:nth-child(even) { background: #F5F9FD; }
+  tbody tr:hover { background: #DAEEF9; }
+  tbody td { padding: 8px 10px; border-bottom: 1px solid #E8F1F8; vertical-align: top; }
+  .status-pill {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: .72rem; font-weight: 700; white-space: nowrap;
+  }
+  .status-Collected { background: #C6EFCE; color: #375623; }
+  .status-Approved  { background: #FFEB9C; color: #7A5800; }
+  .status-Denied    { background: #FFC7CE; color: #9C0006; }
+  .status-Pending   { background: #DDEBF7; color: #1F3864; }
+
+  .amt { text-align: right; font-variant-numeric: tabular-nums; }
+  .ctr { text-align: center; }
+  .comment-cell { max-width: 260px; font-size: .78rem; color: #555; line-height: 1.4; }
+
+  /* Summary tables side by side */
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+  /* Monthly trend */
+  .full-width { margin-bottom: 20px; }
+
+  footer { text-align: center; font-size: .75rem; color: #5A7FA8; padding: 20px; }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 1024px) {
+    .charts-row-3 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 900px) {
+    .container { padding: 16px 12px; }
+    header { padding: 16px 18px; flex-wrap: wrap; gap: 6px; }
+    header h1 { font-size: 1.3rem; }
+    .kpis { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .kpi-value { font-size: 1.35rem; }
+    .charts-row, .charts-row-3, .summary-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    header { padding: 14px; }
+    header h1 { font-size: 1.1rem; }
+    header .updated { display: none; }
+    .container { padding: 12px 10px; }
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .kpi-card { padding: 14px 10px 10px; }
+    .kpi-value { font-size: 1.25rem; }
+    .kpi-label { font-size: .65rem; }
+    /* Filters: scrollable horizontal row */
+    .filters {
+      padding: 12px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .filter-group { flex-shrink: 0; }
+    .ms-btn { min-width: 110px; font-size: .78rem; padding: 6px 8px; }
+    .ms-panel { min-width: 160px; max-height: 220px; }
+    /* Panels open upward when near bottom */
+    .filter-group:last-of-type .ms-panel,
+    .filter-group:nth-last-of-type(2) .ms-panel { left: auto; right: 0; }
+    /* Tables: horizontal scroll */
+    .table-card { padding: 14px 10px; overflow-x: auto; }
+    table { min-width: 560px; font-size: .75rem; }
+    thead th { padding: 7px 8px; }
+    tbody td { padding: 6px 8px; }
+    .comment-cell { max-width: 160px; font-size: .72rem; }
+    .chart-wrap { height: 180px; }
+    .chart-card { padding: 14px 12px; }
+    .btn-reset { padding: 6px 12px; font-size: .78rem; flex-shrink: 0; }
+    .filter-count { display: none; }
+  }
+  @media (max-width: 380px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .kpi-value { font-size: 1.1rem; }
+    header h1 { font-size: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>RC Report — PampaTF</h1>
+    <div class="subtitle">Carrier Claim Tracker &nbsp;|&nbsp; Refundable Charge Back Management</div>
+  </div>
+  <div class="updated">Last updated<br>June 15, 2026</div>
+</header>
+
+<div class="container">
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <div class="filter-group" id="fg-year">
+      <label>Year</label>
+      <div class="ms-btn" onclick="togglePanel('year', event)">
+        <span class="ms-label" id="ms-label-year">All Years</span>
+        <span class="ms-count" id="ms-count-year" style="display:none"></span>
+        <span class="ms-arrow">▼</span>
+      </div>
+      <div class="ms-panel" id="ms-panel-year" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+        <div class="ms-panel-header">
+          <button onclick="selectAll('year')">All</button>
+          <button onclick="clearAll('year')">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="filter-group" id="fg-month">
+      <label>Month</label>
+      <div class="ms-btn" onclick="togglePanel('month', event)">
+        <span class="ms-label" id="ms-label-month">All Months</span>
+        <span class="ms-count" id="ms-count-month" style="display:none"></span>
+        <span class="ms-arrow">▼</span>
+      </div>
+      <div class="ms-panel" id="ms-panel-month" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+        <div class="ms-panel-header">
+          <button onclick="selectAll('month')">All</button>
+          <button onclick="clearAll('month')">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="filter-group" id="fg-status">
+      <label>Status</label>
+      <div class="ms-btn" onclick="togglePanel('status', event)">
+        <span class="ms-label" id="ms-label-status">All Statuses</span>
+        <span class="ms-count" id="ms-count-status" style="display:none"></span>
+        <span class="ms-arrow">▼</span>
+      </div>
+      <div class="ms-panel" id="ms-panel-status" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+        <div class="ms-panel-header">
+          <button onclick="selectAll('status')">All</button>
+          <button onclick="clearAll('status')">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="filter-group" id="fg-carrier">
+      <label>Carrier</label>
+      <div class="ms-btn" onclick="togglePanel('carrier', event)">
+        <span class="ms-label" id="ms-label-carrier">All Carriers</span>
+        <span class="ms-count" id="ms-count-carrier" style="display:none"></span>
+        <span class="ms-arrow">▼</span>
+      </div>
+      <div class="ms-panel" id="ms-panel-carrier" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+        <div class="ms-panel-header">
+          <button onclick="selectAll('carrier')">All</button>
+          <button onclick="clearAll('carrier')">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="filter-group" id="fg-customer">
+      <label>Customer</label>
+      <div class="ms-btn" onclick="togglePanel('customer', event)">
+        <span class="ms-label" id="ms-label-customer">All Customers</span>
+        <span class="ms-count" id="ms-count-customer" style="display:none"></span>
+        <span class="ms-arrow">▼</span>
+      </div>
+      <div class="ms-panel" id="ms-panel-customer" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+        <div class="ms-panel-header">
+          <button onclick="selectAll('customer')">All</button>
+          <button onclick="clearAll('customer')">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="filter-group" id="fg-issue">
+      <label>Issue Type</label>
+      <div class="ms-btn" onclick="togglePanel('issue', event)">
+        <span class="ms-label" id="ms-label-issue">All Issues</span>
+        <span class="ms-count" id="ms-count-issue" style="display:none"></span>
+        <span class="ms-arrow">▼</span>
+      </div>
+      <div class="ms-panel" id="ms-panel-issue" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+        <div class="ms-panel-header">
+          <button onclick="selectAll('issue')">All</button>
+          <button onclick="clearAll('issue')">Clear</button>
+        </div>
+      </div>
+    </div>
+    <button class="btn-reset" onclick="resetFilters()">Reset All</button>
+    <div class="filter-count" id="filter-count"></div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi-card" style="--accent:#2E75B6">
+      <div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-label">Total RCs Filed</div>
+    </div>
+    <div class="kpi-card" style="--accent:#C55A11">
+      <div class="kpi-value" id="kpi-claimed">—</div>
+      <div class="kpi-label">Total Claimed</div>
+    </div>
+    <div class="kpi-card" style="--accent:#375623">
+      <div class="kpi-value" id="kpi-recovered">—</div>
+      <div class="kpi-label">Collected + Approved</div>
+    </div>
+    <div class="kpi-card" style="--accent:#7030A0">
+      <div class="kpi-value" id="kpi-rate">—</div>
+      <div class="kpi-label">Recovery Rate</div>
+    </div>
+    <div class="kpi-card" style="--accent:#0070C0">
+      <div class="kpi-value" id="kpi-open">—</div>
+      <div class="kpi-label">Open RCs</div>
+    </div>
+    <div class="kpi-card" style="--accent:#C00000">
+      <div class="kpi-value" id="kpi-denied">—</div>
+      <div class="kpi-label">Denied</div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <h3>Status Distribution</h3>
+      <div class="chart-wrap"><canvas id="chart-status"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Monthly Trend — Claimed vs. Collected/Approved ($)</h3>
+      <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="charts-row-3">
+    <div class="chart-card">
+      <h3>Top Carriers by $ Claimed</h3>
+      <div class="chart-wrap"><canvas id="chart-carrier"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Claims by Issue Type</h3>
+      <div class="chart-wrap"><canvas id="chart-issue"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Top Customers by # RCs</h3>
+      <div class="chart-wrap"><canvas id="chart-customer"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Summary tables -->
+  <div class="summary-grid">
+    <div class="table-card">
+      <h3>Carrier Recovery Summary</h3>
+      <div class="table-scroll">
+      <table id="tbl-carrier">
+        <thead><tr><th>Carrier</th><th class="ctr"># RCs</th><th class="amt">$ Claimed</th><th class="amt">$ Approved</th><th class="ctr">Rate</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+    <div class="table-card">
+      <h3>Issue Type Summary</h3>
+      <div class="table-scroll">
+      <table id="tbl-issue">
+        <thead><tr><th>Issue Type</th><th class="ctr"># RCs</th><th class="amt">$ Claimed</th><th class="amt">$ Approved</th><th class="ctr">Rate</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Open RCs Table -->
+  <div class="table-card">
+    <h3>Open Requisitions (Pending &amp; Approved) <span class="badge" id="open-count">0</span></h3>
+    <div class="table-scroll">
+    <table id="tbl-open">
+      <thead>
+        <tr>
+          <th>RC#</th><th>Date</th><th>Customer</th><th>Carrier</th>
+          <th>Issue</th><th class="amt">$ Claimed</th><th class="amt">$ Approved</th>
+          <th>Status</th><th>Comment</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- All RCs Table -->
+  <div class="table-card">
+    <h3>All Requisitions <span class="badge" id="all-count" style="background:#2E75B6">0</span></h3>
+    <div class="table-scroll">
+    <table id="tbl-all">
+      <thead>
+        <tr>
+          <th>RC#</th><th>Date</th><th>Customer</th><th>Carrier</th>
+          <th>Issue</th><th class="amt">$ Claimed</th><th class="amt">$ Approved</th>
+          <th>Status</th><th>Comment</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>PampaTF · RC Report Dashboard · Data as of June 2026</footer>
+
+<script>
+const RAW_DATA = [{"date": "2025-10-28", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM91", "ti": "FC00048668", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Meijer", "so": "33854", "carrier": "Estes", "issue": "Shortage", "original": 538.56, "approved": 538.56, "status": "Collected", "comment": "Approved 12/10 - Awaiting CM details"}, {"date": "2025-10-16", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM92", "ti": "FC00048670", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Albertsons", "so": "35028", "carrier": "TQL", "issue": "Late Arrival", "original": 500.0, "approved": 500.0, "status": "Collected", "comment": "Approved 12/10 - Awaiting CM details"}, {"date": "2025-10-16", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM93", "ti": "FC00048672", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Albertsons", "so": "35024", "carrier": "TQL", "issue": "Late Arrival", "original": 500.0, "approved": 500.0, "status": "Collected", "comment": "Under review "}, {"date": "2025-10-16", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM94", "ti": "FC00048673", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Albertsons", "so": "35031", "carrier": "TQL", "issue": "Late Arrival", "original": 500.0, "approved": 500.0, "status": "Collected", "comment": "Under review "}, {"date": "2025-10-16", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM95", "ti": "FC00048674", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Albertsons", "so": "", "carrier": "Estes", "issue": "Damages", "original": 302.0, "approved": 302.0, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/15"}, {"date": "2025-10-16", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM96", "ti": "FC00048675", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Albertsons", "so": "35030", "carrier": "TQL", "issue": "Late Arrival", "original": 500.0, "approved": 500.0, "status": "Collected", "comment": "Approved 12/10 - Awaiting CM details"}, {"date": "2025-10-20", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM97", "ti": "FC00048677", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Valu", "so": "34924", "carrier": "Nolan", "issue": "Shortage", "original": 266.7, "approved": 266.7, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/22"}, {"date": "2025-10-24", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM98", "ti": "FC00048678", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Meijer", "so": "35028", "carrier": "Estes", "issue": "Shortage", "original": 239.04, "approved": 239.04, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/15"}, {"date": "2025-10-24", "month": 10, "year": 2025, "dm": "1173260", "rc": "PAM99", "ti": "FC00048679", "filed": "2025-11-12", "resolved": "2025-12-16", "customer": "Meijer", "so": "35210", "carrier": "Estes", "issue": "Shortage", "original": 199.2, "approved": 199.2, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/15"}, {"date": "2025-02-19", "month": 2, "year": 2025, "dm": "1173260", "rc": "TF62", "ti": "FC000486784", "filed": "2025-11-14", "resolved": "2025-12-16", "customer": "UNFI", "so": "216843", "carrier": "CH Robinson", "issue": "Missing Product", "original": 1632.0, "approved": 800.0, "status": "Collected", "comment": "Additional paperwork requested - sent 11/21"}, {"date": "2025-02-25", "month": 2, "year": 2025, "dm": "1173260", "rc": "PAM63", "ti": "FC00048688", "filed": "2025-11-14", "resolved": "2025-12-16", "customer": "BJ's Wholesale", "so": "32081", "carrier": "TQL", "issue": "Over 1/2 Hour Late", "original": 400.0, "approved": 400.0, "status": "Collected", "comment": "Approved 12/10 - Awaiting CM details"}, {"date": "2025-02-27", "month": 2, "year": 2025, "dm": "1Z59099R0735350655", "rc": "PAM68", "ti": "FC00048690", "filed": "2025-11-14", "resolved": "", "customer": "Albertsons", "so": "31118", "carrier": "Becker", "issue": "Late Arrival", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": "on Becker Claim check #:  38457 1Z59099R0735350655"}, {"date": "2025-02-27", "month": 2, "year": 2025, "dm": "1173260", "rc": "PAM69", "ti": "FC00048691", "filed": "2025-11-14", "resolved": "2025-12-16", "customer": "Albertsons", "so": "31657", "carrier": "CH Robinson", "issue": "Late PO Due Date", "original": 500.0, "approved": 250.0, "status": "Collected", "comment": "Approved 12/10 - Awaiting CM details"}, {"date": "2025-03-11", "month": 3, "year": 2025, "dm": "", "rc": "PAM72", "ti": "FC00048694", "filed": "2025-11-14", "resolved": "", "customer": "BJ's Wholesale", "so": "32398", "carrier": "ABF", "issue": "Over 1/2 Hour Late", "original": 150.0, "approved": 0, "status": "Denied", "comment": "Under review "}, {"date": "2025-04-29", "month": 4, "year": 2025, "dm": "", "rc": "PAM80", "ti": "FC00048701", "filed": "2025-11-15", "resolved": "", "customer": "Spartan Nash", "so": "32322", "carrier": "TQL", "issue": "Damages", "original": 317.52, "approved": 0, "status": "Denied", "comment": "Additional paperwork requested - sent 11/21"}, {"date": "2025-05-28", "month": 5, "year": 2025, "dm": "1173260", "rc": "PAM81", "ti": "FC00048706", "filed": "2025-11-15", "resolved": "2025-12-16", "customer": "Albertsons", "so": "33410", "carrier": "TQL", "issue": "Late Arrival", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/22"}, {"date": "2025-06-19", "month": 6, "year": 2025, "dm": "1173260", "rc": "PAM82", "ti": "FC00048707", "filed": "2025-11-15", "resolved": "2025-12-16", "customer": "BJ's Wholesale", "so": "33413", "carrier": "SAIA", "issue": "Late PO Due Date", "original": 850.0, "approved": 400.0, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/22"}, {"date": "2025-06-19", "month": 6, "year": 2025, "dm": "1173260", "rc": "PAM85", "ti": "FC00048710", "filed": "2025-11-15", "resolved": "2025-12-16", "customer": "BJ's Wholesale", "so": "33503", "carrier": "Estes", "issue": "Same Day Reschedule", "original": 300.0, "approved": 150.0, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/22"}, {"date": "2025-06-19", "month": 6, "year": 2025, "dm": "1173260", "rc": "PAM88", "ti": "FC00048713", "filed": "2025-11-15", "resolved": "2025-12-16", "customer": "BJ's Wholesale", "so": "33723", "carrier": "TQL", "issue": "Over 1/2 Hour Late", "original": 200.0, "approved": 200.0, "status": "Collected", "comment": "CM to come applied to Invoice that will be sent 12/22"}, {"date": "2025-01-30", "month": 1, "year": 2025, "dm": "", "rc": "TF60", "ti": "FC00048679", "filed": "2025-11-14", "resolved": "", "customer": "UNFI", "so": "216682", "carrier": "Estes", "issue": "No Call/No Show", "original": 250.0, "approved": 0, "status": "Denied", "comment": ""}, {"date": "2025-01-30", "month": 1, "year": 2025, "dm": "", "rc": "TF61", "ti": "FC00048681", "filed": "2025-11-14", "resolved": "", "customer": "UNFI", "so": "217386", "carrier": "Estes", "issue": "No Call/No Show", "original": 250.0, "approved": 0, "status": "Denied", "comment": ""}, {"date": "2025-07-03", "month": 7, "year": 2025, "dm": "", "rc": "PAM89", "ti": "FC00048717", "filed": "2025-11-15", "resolved": "", "customer": "BJ's Wholesale", "so": "34046", "carrier": "Estes", "issue": "Over 1/2 Hour Late", "original": 350.0, "approved": 0, "status": "Denied", "comment": ""}, {"date": "2025-07-03", "month": 7, "year": 2025, "dm": "", "rc": "PAM90", "ti": "FC00048719", "filed": "2025-11-15", "resolved": "", "customer": "BJ's Wholesale", "so": "33985", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 725.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "19", "ti": "", "filed": "", "resolved": "", "customer": "AWG", "so": "21030", "carrier": "TI", "issue": "Missing Product", "original": 630.5, "approved": 0.0, "status": "Denied", "comment": "issue resolved, email being sent today (10/2), so we can proceed with deduction"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "20", "ti": "", "filed": "", "resolved": "", "customer": "AWG", "so": "21068", "carrier": "TQL", "issue": "Missing Product", "original": 2084.6, "approved": 0.0, "status": "Denied", "comment": "Still pening approval - 8/1"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "21", "ti": "", "filed": "", "resolved": "", "customer": "Walgreens", "so": "21029", "carrier": "TI", "issue": "Missing Product", "original": 1843.97, "approved": 0.0, "status": "Denied", "comment": "Still pening approval - 8/1"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "22", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "24340", "carrier": "TI", "issue": "Missing Product", "original": 1600.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "29", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "28775", "carrier": "XPO", "issue": "Missed/Not Cancelled", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "30", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "28776", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "31", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "28776", "carrier": "Estes", "issue": "Over 1/2 Hour Late", "original": 150.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "32", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27879", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 725.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "33", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29327", "carrier": "SAIA", "issue": "Over 1/2 Hour Late", "original": 200.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-11-14", "month": 11, "year": 2024, "dm": "", "rc": "PAM37", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29950", "carrier": "SAIA", "issue": "Missed/Not Cancelled", "original": 725.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-04", "month": 12, "year": 2024, "dm": "", "rc": "PAM42", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29950", "carrier": "SAIA", "issue": "Damages", "original": 632.4, "approved": 0, "status": "Denied", "comment": ""}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "PAM45", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "30675", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 725.0, "approved": 0.0, "status": "Denied", "comment": "Logsitics error"}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "PAM46", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "30675", "carrier": "Estes", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": "Logsitics error"}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "PAM47", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "30677", "carrier": "SAIA", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "TF48", "ti": "", "filed": "", "resolved": "", "customer": "Weis Markets", "so": "214531", "carrier": "Estes", "issue": "Shortage", "original": 1900.8, "approved": 0.0, "status": "Denied", "comment": "Claim Number: FC00045297 - Product was found and returned redelivered back to the customer. "}, {"date": "2024-12-18", "month": 12, "year": 2024, "dm": "", "rc": "PAM50", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "30916", "carrier": "ABF", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-26", "month": 12, "year": 2024, "dm": "", "rc": "PAM52", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "30384", "carrier": "TQL", "issue": "Late PO Due Date", "original": 500.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-26", "month": 12, "year": 2024, "dm": "", "rc": "PAM53", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "30162", "carrier": "TQL", "issue": "Late PO Due Date", "original": 500.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-26", "month": 12, "year": 2024, "dm": "", "rc": "PAM54", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "30883", "carrier": "ABF", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-26", "month": 12, "year": 2024, "dm": "", "rc": "PAM55", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "30985", "carrier": "ABF", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2024-12-26", "month": 12, "year": 2024, "dm": "", "rc": "PAM56", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "30161", "carrier": "TQL", "issue": "Late PO Due Date", "original": 500.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-07", "month": 1, "year": 2025, "dm": "", "rc": "PAM57", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "31506", "carrier": "Estes", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-01-14", "month": 1, "year": 2025, "dm": "", "rc": "PAM59", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "31506", "carrier": "Estes", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-02-25", "month": 2, "year": 2025, "dm": "", "rc": "PAM64", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "32081", "carrier": "TQL", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-02-27", "month": 2, "year": 2025, "dm": "", "rc": "PAM65", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "31588", "carrier": "Nolan", "issue": "Late PO Due Date", "original": 500.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-02-27", "month": 2, "year": 2025, "dm": "", "rc": "PAM67", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "31118", "carrier": "Becker", "issue": "Late PO Due Date", "original": 500.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-03-11", "month": 3, "year": 2025, "dm": "", "rc": "PAM70", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "32397", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 750.0, "approved": 0, "status": "Denied", "comment": ""}, {"date": "2025-03-11", "month": 3, "year": 2025, "dm": "", "rc": "PAM71", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "32398", "carrier": "ABF", "issue": "Late PO Due Date", "original": 850.0, "approved": 0.0, "status": "Denied", "comment": ""}, {"date": "2025-03-15", "month": 3, "year": 2025, "dm": "", "rc": "TF73", "ti": "", "filed": "", "resolved": "", "customer": "UNFI", "so": "215458", "carrier": "Manco Logistics", "issue": "Lost Shipment", "original": 2411.28, "approved": 0.0, "status": "Denied", "comment": "Product was found and returned to warehouse"}, {"date": "2025-03-27", "month": 3, "year": 2025, "dm": "", "rc": "PAM75", "ti": "", "filed": "", "resolved": "", "customer": "UNFI", "so": "32249", "carrier": "Estes", "issue": "Shortage", "original": 285.6, "approved": 0, "status": "Denied", "comment": "Returned to warehouse - ICM completed"}, {"date": "2025-04-24", "month": 4, "year": 2025, "dm": "", "rc": "PAM78", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "32976", "carrier": "TQL", "issue": "Late Reschedule", "original": 250.0, "approved": 0, "status": "Denied", "comment": "Has not been approved"}, {"date": "2025-04-24", "month": 4, "year": 2025, "dm": "", "rc": "PAM79", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "32706", "carrier": "CH Robinson", "issue": "Late Reschedule", "original": 750.0, "approved": 0, "status": "Denied", "comment": "Has not been approved"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "", "rc": "34", "ti": "", "filed": "", "resolved": "", "customer": "Empire Distribution", "so": "29877", "carrier": "", "issue": "Damages", "original": 386.75, "approved": 0, "status": "Collected", "comment": "Sent on 9/18 - pending"}, {"date": "2024-10-31", "month": 10, "year": 2024, "dm": "", "rc": "PAM35", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29802", "carrier": "ABF", "issue": "Over 1/2 Hour Late", "original": 150.0, "approved": 150.0, "status": "Collected", "comment": "Filed on 10/31/2024"}, {"date": "2024-10-31", "month": 10, "year": 2024, "dm": "", "rc": "TF36", "ti": "", "filed": "", "resolved": "", "customer": "UNFI", "so": "214098", "carrier": "Fitzmark", "issue": "Damages", "original": 1297.44, "approved": 1297.44, "status": "Collected", "comment": "Filed on 10/31/2024"}, {"date": "2024-11-14", "month": 11, "year": 2024, "dm": "", "rc": "PAM38", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29952", "carrier": "Estes", "issue": "Same Day Reschedule", "original": 300.0, "approved": 300.0, "status": "Collected", "comment": ""}, {"date": "2024-11-14", "month": 11, "year": 2024, "dm": "", "rc": "TF39", "ti": "", "filed": "", "resolved": "", "customer": "C&S Wholesale", "so": "214244", "carrier": "Blue Grace", "issue": "No Call/No Show", "original": 300.0, "approved": 300.0, "status": "Collected", "comment": ""}, {"date": "2024-11-18", "month": 11, "year": 2024, "dm": "", "rc": "PAM40", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29950", "carrier": "SAIA", "issue": "Same Day Reschedule", "original": 300.0, "approved": 300.0, "status": "Collected", "comment": ""}, {"date": "2024-11-18", "month": 11, "year": 2024, "dm": "", "rc": "PAM41", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "29950", "carrier": "SAIA", "issue": "Late PO Due Date", "original": 850.0, "approved": 425.0, "status": "Collected", "comment": ""}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "PAM43", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "30126", "carrier": "Nolan", "issue": "Late PO Due Date", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": ""}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "PAM44", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "29941", "carrier": "Sunteck", "issue": "Late PO Due Date", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": ""}, {"date": "2024-12-11", "month": 12, "year": 2024, "dm": "", "rc": "TF49", "ti": "", "filed": "", "resolved": "", "customer": "Greater Boston Foodbank", "so": "214150", "carrier": "CH Robinson", "issue": "Damages", "original": 1098.98, "approved": 1098.09, "status": "Collected", "comment": ""}, {"date": "2024-12-26", "month": 12, "year": 2024, "dm": "", "rc": "PAM51", "ti": "", "filed": "", "resolved": "", "customer": "Albertsons", "so": "30582", "carrier": "Becker", "issue": "No Call/No Show", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": ""}, {"date": "2025-01-09", "month": 1, "year": 2025, "dm": "", "rc": "PAM58", "ti": "", "filed": "", "resolved": "", "customer": "UNFI", "so": "28881", "carrier": "SAIA", "issue": "Damages", "original": 722.88, "approved": 722.88, "status": "Collected", "comment": ""}, {"date": "2025-03-19", "month": 3, "year": 2025, "dm": "", "rc": "PAM74", "ti": "", "filed": "", "resolved": "", "customer": "UNFI", "so": "31880", "carrier": "Estes", "issue": "Lost Shipment", "original": 385.92, "approved": 385.92, "status": "Collected", "comment": "Deduction approved - claim to be paid to TI week of 7/7"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "SO15966BLS", "rc": "4", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "15966", "carrier": "TQL", "issue": "Missed/Not Cancelled", "original": 1450.0, "approved": 1450.0, "status": "Collected", "comment": "PO#:  0111152178 & 0111062766"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "DM16660", "rc": "2", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "16660", "carrier": "TQL", "issue": "Missing Product", "original": 2196.18, "approved": 2196.18, "status": "Collected", "comment": "TQL Claim #: 19350449"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "DM14562", "rc": "5", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "14562", "carrier": "TQL", "issue": "Missing Product", "original": 1902.6, "approved": 1902.6, "status": "Collected", "comment": "TQL Claim #: 18131240"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "SO15966BLS", "rc": "3", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "16660", "carrier": "TQL", "issue": "Same Day Reschedule", "original": 300.0, "approved": 300.0, "status": "Collected", "comment": "PO#: 1111358667"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "6", "ti": "", "filed": "", "resolved": "", "customer": "Supervalu", "so": "17072", "carrier": "TQL", "issue": "Missed/Not Cancelled", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": "Approved 6/21 - need to send to TI for deduction"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "DM18071", "rc": "7", "ti": "", "filed": "", "resolved": "", "customer": "Supervalu", "so": "18071", "carrier": "TI", "issue": "No Appointment Scheduled", "original": 300.0, "approved": 300.0, "status": "Collected", "comment": "Debited on 7/1 as per MG no need approval from TI (GM Note)"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "DM18121", "rc": "8", "ti": "", "filed": "", "resolved": "", "customer": "Supervalu", "so": "18121", "carrier": "TI", "issue": "Missed/Not Cancelled", "original": 100.0, "approved": 100.0, "status": "Collected", "comment": "Debited on 7/1 as per MG no need approval from TI (GM Note)"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "DM17996", "rc": "9", "ti": "", "filed": "", "resolved": "", "customer": "Supervalu", "so": "17996", "carrier": "TI", "issue": "Missed/Not Cancelled", "original": 100.0, "approved": 100.0, "status": "Collected", "comment": "Debited on 7/1 as per MG no need approval from TI (GM Note)"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "DM18633", "rc": "10", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "18633", "carrier": "TI", "issue": "Missed/Not Cancelled", "original": 750.0, "approved": 750.0, "status": "Collected", "comment": "Debited on 7/1 as per MG no need approval from TI (GM Note)"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "11", "ti": "", "filed": "", "resolved": "", "customer": "GENERAL BEVERAGE SALES CO", "so": "18432\u00a0\u00a0\u00a0\u00a0\u00a0 ", "carrier": "TI", "issue": "Damages", "original": 513.92, "approved": 513.92, "status": "Collected", "comment": "Approved 6/7"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "12", "ti": "", "filed": "", "resolved": "", "customer": "INDIANA WHOLESALE W&L DBA JOHN", "so": "18137\u00a0\u00a0\u00a0\u00a0\u00a0 ", "carrier": "TI", "issue": "Shortage", "original": 377.04, "approved": 377.04, "status": "Collected", "comment": "Approved 6/7"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "13", "ti": "", "filed": "", "resolved": "", "customer": "JOHNSON BROTHERS OF NORTH CARO", "so": "18673\u00a0\u00a0\u00a0\u00a0\u00a0 ", "carrier": "TI", "issue": "Damages", "original": 1270.72, "approved": 1270.72, "status": "Collected", "comment": "Approved 6/7"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "14", "ti": "", "filed": "", "resolved": "", "customer": "MC ELITE WINES CORP", "so": "18846\u00a0\u00a0\u00a0\u00a0\u00a0 ", "carrier": "TI", "issue": "Shortage", "original": 1280.0, "approved": 640.0, "status": "Collected", "comment": "Approved 6/12"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "15", "ti": "", "filed": "", "resolved": "", "customer": "Johnson Bros Famos Brands - SD", "so": "20773", "carrier": "TI", "issue": "Frozen Product", "original": 2605.52, "approved": 1200.0, "status": "Collected", "comment": "Approved 6/7 - Partial Payment"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "16", "ti": "", "filed": "", "resolved": "", "customer": "Johnson Bros of Iowa", "so": "20622", "carrier": "TI", "issue": "Frozen Product", "original": 844.5, "approved": 350.0, "status": "Collected", "comment": "Approved 6/12 - Partial Re-payment"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "17", "ti": "", "filed": "", "resolved": "", "customer": "GENERAL BEVERAGE SALES CO", "so": "19912", "carrier": "TI", "issue": "Damages", "original": 454.56, "approved": 454.56, "status": "Collected", "comment": "Approved 6/7 "}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "6142023", "rc": "18", "ti": "", "filed": "", "resolved": "", "customer": "GENERAL BEVERAGE SALES CO", "so": "21613", "carrier": "TI", "issue": "Damages", "original": 288.43, "approved": 288.43, "status": "Collected", "comment": "Approved 6/7"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "Sundry Debit", "rc": "23", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27443", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 150.0, "approved": 100.0, "status": "Collected", "comment": "Check sent on 9/30"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "Sundry Debit", "rc": "24", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27231", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 850.0, "approved": 400.0, "status": "Collected", "comment": "Check sent on 9/30"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "Sundry Debit", "rc": "25", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27231", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 850.0, "approved": 400.0, "status": "Collected", "comment": "Check sent on 9/30"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "Sundry Debit", "rc": "26", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27231", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 150.0, "approved": 100.0, "status": "Collected", "comment": "Check sent on 9/30"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "Sundry Debit", "rc": "27", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27921", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 850.0, "approved": 400.0, "status": "Collected", "comment": "Check sent on 9/30"}, {"date": "2025-01-01", "month": 1, "year": 2025, "dm": "Sundry Debit", "rc": "28", "ti": "", "filed": "", "resolved": "", "customer": "BJ's Wholesale", "so": "27589", "carrier": "Estes", "issue": "Missed/Not Cancelled", "original": 850.0, "approved": 400.0, "status": "Collected", "comment": "Check sent on 9/30"}, {"date": "2026-01-23", "month": 1, "year": 2026, "dm": "1185174", "rc": "PAM104", "ti": "FC00068637", "filed": "2025-01-16", "resolved": "2026-02-24", "customer": "Meijer", "so": "35480", "carrier": "SAIA", "issue": "Shortage", "original": 304.56, "approved": 304.56, "status": "Collected", "comment": "Debit in 2/24 invoice"}, {"date": "2026-01-23", "month": 1, "year": 2026, "dm": "1185174", "rc": "PAM107", "ti": "FC00068642", "filed": "2025-01-16", "resolved": "2026-02-24", "customer": "UNFI", "so": "34839", "carrier": "Estes", "issue": "Lost Shipment", "original": 3922.44, "approved": 2900.0, "status": "Collected", "comment": "Approved 75% repayment on 2/19"}, {"date": "2026-01-27", "month": 1, "year": 2026, "dm": "1185174", "rc": "PAM108", "ti": "FC00068737", "filed": "2026-01-26", "resolved": "2024-02-24", "customer": "LIDL", "so": "36216", "carrier": "TQL", "issue": "Damages/Shortage", "original": 198.72, "approved": 198.72, "status": "Collected", "comment": "Debit in 2/24 invoice"}, {"date": "2026-01-27", "month": 1, "year": 2026, "dm": "1185174", "rc": "PAM109", "ti": "FC00068747", "filed": "2026-01-26", "resolved": "2026-02-24", "customer": "RC TAYLOR", "so": "36188", "carrier": "Estes", "issue": "Damages", "original": 600.18, "approved": 600.18, "status": "Collected", "comment": "Debit in 2/24 invoice"}, {"date": "2026-01-28", "month": 1, "year": 2026, "dm": "1185174", "rc": "PAM110", "ti": "FC00069245", "filed": "2026-01-28", "resolved": "2026-02-24", "customer": "UNFI", "so": "36363", "carrier": "Nolan", "issue": "Damages", "original": 1432.32, "approved": 1432.32, "status": "Collected", "comment": "Update expected week 2/24"}, {"date": "2026-02-12", "month": 2, "year": 2026, "dm": "1185174", "rc": "PAM111", "ti": "FC00072014", "filed": "2026-02-12", "resolved": "2026-02-24", "customer": "Albertsons", "so": "36220", "carrier": "TQL", "issue": "Late PO Due Date", "original": 500.0, "approved": 500.0, "status": "Collected", "comment": "Approval 2/19; pending debit date"}, {"date": "2026-02-19", "month": 2, "year": 2026, "dm": "1192375", "rc": "PAM112", "ti": "FC00073058", "filed": "2026-02-19", "resolved": "2026-04-13", "customer": "Albertsons", "so": "34626", "carrier": "TQL", "issue": "No Call/No Show", "original": 250.0, "approved": 250.0, "status": "Collected", "comment": "Debit in 4/13 Invoice"}, {"date": "2026-03-04", "month": 3, "year": 2026, "dm": "1192375", "rc": "PAM113", "ti": "FC00088276", "filed": "2026-03-04", "resolved": "2026-04-13", "customer": "BJ's Wholesale", "so": "36769", "carrier": "XPO", "issue": "Incorrect Paperwork", "original": 200.0, "approved": 100.0, "status": "Collected", "comment": "Debit in 4/13 Invoice"}, {"date": "2026-03-10", "month": 3, "year": 2026, "dm": "1192375", "rc": "PAM114", "ti": "FC00091267", "filed": "2026-03-10", "resolved": "2026-04-13", "customer": "BJ's Wholesale", "so": "37053", "carrier": "SYNCHRONIZED", "issue": "Same Day Reschedule", "original": 300.0, "approved": 150.0, "status": "Collected", "comment": "CARRIER WS HELD UP AT FIRST STOP, MG EMAILED TO RESCHEDULE; Debit in 4/13 Invoice"}, {"date": "2026-03-25", "month": 3, "year": 2026, "dm": "1192375", "rc": "PAM115", "ti": "FC00100255", "filed": "2026-03-25", "resolved": "2026-04-13", "customer": "Weis Markets", "so": "36544", "carrier": "Estes", "issue": "Damages", "original": 262.51, "approved": 262.51, "status": "Collected", "comment": "Debit in 4/13 Invoice"}, {"date": "2026-04-02", "month": 4, "year": 2026, "dm": "", "rc": "PAM116", "ti": "FC00100578", "filed": "2026-04-02", "resolved": "", "customer": "Albertsons", "so": "36509", "carrier": "SYNCHRONIZED", "issue": "Over 1/2 Hour Late", "original": 250.0, "approved": 250.0, "status": "Approved", "comment": "Appointment Scheduled:  7:45am - Arrival 9:25AM"}, {"date": "2026-04-02", "month": 4, "year": 2026, "dm": "", "rc": "PAM117", "ti": "FC00100587", "filed": "2026-04-02", "resolved": "", "customer": "K-VAT", "so": "37159", "carrier": "Sunteck", "issue": "No Call/No Show", "original": 750.0, "approved": 0.0, "status": "Denied", "comment": "CARRIER WS HELD UP AT FIRST STOP, MG EMAILED TO RESCHEDULE"}, {"date": "2026-04-09", "month": 4, "year": 2026, "dm": "", "rc": "PAM118", "ti": "FC00100697", "filed": "2026-04-09", "resolved": "", "customer": "Albertsons", "so": "36494", "carrier": "TQL", "issue": "Damages/Shortage", "original": 756.0, "approved": 756.0, "status": "Approved", "comment": "Expect resolution week of 5/4 - Debit Week 5/24"}, {"date": "2026-04-09", "month": 4, "year": 2026, "dm": "", "rc": "PAM119", "ti": "FC00100713", "filed": "2026-04-09", "resolved": "", "customer": "Meijer", "so": "36493", "carrier": "XPO", "issue": "Damages/Shortage", "original": 877.68, "approved": 877.68, "status": "Approved", "comment": "Expect resolution week of 5/4 - Debit Week 5/24"}, {"date": "2026-04-22", "month": 4, "year": 2026, "dm": "", "rc": "PAM120", "ti": "FC00101427", "filed": "2026-04-22", "resolved": "", "customer": "BJ's Wholesale", "so": "37351", "carrier": "XPO", "issue": "Missed/Not Cancelled", "original": 725.0, "approved": 362.5, "status": "Approved", "comment": "1/2 payment - Debit 5/24"}, {"date": "2026-05-14", "month": 5, "year": 2026, "dm": "", "rc": "PAM121", "ti": "FC00115528", "filed": "2026-05-13", "resolved": "", "customer": "UNFI", "so": "37526", "carrier": "SYNCHRONIZED", "issue": "Damages", "original": 1258.3, "approved": 0, "status": "Pending", "comment": "Unable to provide BOL to show there was no damages.  Claim filed"}, {"date": "2026-05-21", "month": 5, "year": 2026, "dm": "", "rc": "PAM122", "ti": "FC00121027", "filed": "2026-05-20", "resolved": "", "customer": "BJ's Wholesale", "so": "37758", "carrier": "TQL", "issue": "Late PO Due Date", "original": 850.0, "approved": 0, "status": "Pending", "comment": ""}, {"date": "2026-06-10", "month": 6, "year": 2026, "dm": "", "rc": "PAM123", "ti": "FC00235462", "filed": "2026-06-09", "resolved": "", "customer": "Albertsons", "so": "", "carrier": "", "issue": "Late Arrival", "original": 250.0, "approved": 0, "status": "Pending", "comment": ""}, {"date": "2026-06-10", "month": 6, "year": 2026, "dm": "", "rc": "PAM124", "ti": "FC00234515", "filed": "2026-06-09", "resolved": "", "customer": "Albertsons", "so": "", "carrier": "", "issue": "No Call/No Show", "original": 500.0, "approved": 0, "status": "Pending", "comment": ""}, {"date": "2026-06-10", "month": 6, "year": 2026, "dm": "", "rc": "PAM125", "ti": "FC00234610", "filed": "2026-06-09", "resolved": "", "customer": "Albertsons", "so": "", "carrier": "", "issue": "No Call/No Show", "original": 500.0, "approved": 0, "status": "Pending", "comment": ""}]
+;
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const STATUS_COLORS = {
+  Collected: '#C6EFCE', Approved: '#FFEB9C', Denied: '#FFC7CE', Pending: '#DDEBF7'
+};
+const STATUS_BORDER = {
+  Collected: '#375623', Approved: '#7A5800', Denied: '#9C0006', Pending: '#1F3864'
+};
+
+let charts = {};
+
+// ---- Multi-select helpers ----
+const FILTERS = {
+  year:     { key: 'year',     labelFn: v => String(v),           allLabel: 'All Years'     },
+  month:    { key: 'month',    labelFn: v => MONTH_NAMES[v-1],    allLabel: 'All Months'    },
+  status:   { key: 'status',   labelFn: v => v,                   allLabel: 'All Statuses'  },
+  carrier:  { key: 'carrier',  labelFn: v => v,                   allLabel: 'All Carriers'  },
+  customer: { key: 'customer', labelFn: v => v,                   allLabel: 'All Customers' },
+  issue:    { key: 'issue',    labelFn: v => v,                   allLabel: 'All Issues'    },
+};
+
+function getChecked(fid) {
+  return [...document.querySelectorAll(`#ms-panel-${fid} input[type=checkbox]:checked`)].map(c => c.value);
+}
+
+function updateBtnLabel(fid) {
+  const cfg = FILTERS[fid];
+  const checked = getChecked(fid);
+  const total = document.querySelectorAll(`#ms-panel-${fid} input[type=checkbox]`).length;
+  const btn = document.querySelector(`#fg-${fid} .ms-btn`);
+  const lbl = document.getElementById(`ms-label-${fid}`);
+  const cnt = document.getElementById(`ms-count-${fid}`);
+
+  if (checked.length === 0 || checked.length === total) {
+    lbl.textContent = cfg.allLabel;
+    cnt.style.display = 'none';
+    btn.classList.remove('active');
+  } else if (checked.length === 1) {
+    lbl.textContent = cfg.labelFn(checked[0]);
+    cnt.style.display = 'none';
+    btn.classList.add('active');
+  } else {
+    lbl.textContent = `${checked.length} selected`;
+    cnt.style.display = 'none';
+    btn.classList.add('active');
+  }
+}
+
+function togglePanel(fid, event) {
+  if (event) { event.stopPropagation(); event.preventDefault(); }
+  const panel = document.getElementById(`ms-panel-${fid}`);
+  const isOpen = panel.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.ms-panel').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.ms-arrow').forEach(a => a.style.transform = '');
+  if (!isOpen) {
+    panel.classList.add('open');
+    document.querySelector(`#fg-${fid} .ms-arrow`).style.transform = 'rotate(180deg)';
+  }
+}
+
+function selectAll(fid) {
+  document.querySelectorAll(`#ms-panel-${fid} input[type=checkbox]`).forEach(c => c.checked = true);
+  updateBtnLabel(fid); update();
+}
+
+function clearAll(fid) {
+  document.querySelectorAll(`#ms-panel-${fid} input[type=checkbox]`).forEach(c => c.checked = false);
+  updateBtnLabel(fid); update();
+}
+
+// Close panels when tapping/clicking outside — both events needed for iOS Safari
+function closeAllPanels(e) {
+  if (!e.target.closest('.filter-group')) {
+    document.querySelectorAll('.ms-panel').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('.ms-arrow').forEach(a => a.style.transform = '');
+  }
+}
+document.addEventListener('click', closeAllPanels);
+document.addEventListener('touchstart', closeAllPanels, { passive: true });
+
+function fmt$(n) {
+  if (!n && n !== 0) return '—';
+  return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+}
+function fmtPct(n, d) {
+  if (!d) return '—';
+  return (n / d * 100).toFixed(1) + '%';
+}
+function fmtDate(s) {
+  if (!s) return '';
+  const [y, m, d] = s.split('-');
+  return `${m}/${d}/${y}`;
+}
+
+function getFiltered() {
+  const sel = {};
+  Object.keys(FILTERS).forEach(fid => {
+    const checked = getChecked(fid);
+    const total = document.querySelectorAll(`#ms-panel-${fid} input[type=checkbox]`).length;
+    sel[fid] = (checked.length === 0 || checked.length === total) ? null : new Set(checked.map(String));
+  });
+
+  return RAW_DATA.filter(r =>
+    (!sel.year     || sel.year.has(String(r.year)))     &&
+    (!sel.month    || sel.month.has(String(r.month)))   &&
+    (!sel.status   || sel.status.has(r.status))         &&
+    (!sel.carrier  || sel.carrier.has(r.carrier))       &&
+    (!sel.customer || sel.customer.has(r.customer))     &&
+    (!sel.issue    || sel.issue.has(r.issue))
+  );
+}
+
+function populateFilters() {
+  const years    = [...new Set(RAW_DATA.map(r => r.year).filter(Boolean))].sort();
+  const months   = [...new Set(RAW_DATA.map(r => r.month).filter(Boolean))].sort((a,b)=>a-b);
+  const statuses = [...new Set(RAW_DATA.map(r => r.status).filter(Boolean))].sort();
+  const carriers = [...new Set(RAW_DATA.map(r => r.carrier).filter(Boolean))].sort();
+  const customers= [...new Set(RAW_DATA.map(r => r.customer).filter(Boolean))].sort();
+  const issues   = [...new Set(RAW_DATA.map(r => r.issue).filter(Boolean))].sort();
+
+  const buildPanel = (fid, vals, labelFn) => {
+    const panel = document.getElementById(`ms-panel-${fid}`);
+    vals.forEach(v => {
+      const item = document.createElement('label');
+      item.className = 'ms-item';
+      item.innerHTML = `<input type="checkbox" value="${String(v).replace(/"/g,'&quot;')}" checked>
+                        <span>${labelFn ? labelFn(v) : v}</span>`;
+      item.querySelector('input').addEventListener('change', () => { updateBtnLabel(fid); update(); });
+      panel.appendChild(item);
+    });
+  };
+
+  buildPanel('year',     years);
+  buildPanel('month',    months,   m => MONTH_NAMES[m-1]);
+  buildPanel('status',   statuses);
+  buildPanel('carrier',  carriers);
+  buildPanel('customer', customers);
+  buildPanel('issue',    issues);
+}
+
+function resetFilters() {
+  Object.keys(FILTERS).forEach(fid => {
+    document.querySelectorAll(`#ms-panel-${fid} input[type=checkbox]`).forEach(c => c.checked = true);
+    updateBtnLabel(fid);
+  });
+  document.querySelectorAll('.ms-panel').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.ms-arrow').forEach(a => a.style.transform = '');
+  update();
+}
+
+function groupBy(data, key, valKey) {
+  const m = {};
+  data.forEach(r => {
+    const k = r[key] || '(unknown)';
+    if (!m[k]) m[k] = { count: 0, orig: 0, appr: 0 };
+    m[k].count++;
+    m[k].orig += r.original || 0;
+    m[k].appr += r.approved || 0;
+  });
+  return Object.entries(m).map(([k, v]) => ({ key: k, ...v }));
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function update() {
+  const data = getFiltered();
+  const total = data.length;
+  const totalClaimed = data.reduce((s, r) => s + (r.original || 0), 0);
+  const totalAppr = data.filter(r => r.status === 'Collected' || r.status === 'Approved')
+                        .reduce((s, r) => s + (r.approved || 0), 0);
+  const openRCs = data.filter(r => r.status === 'Pending' || r.status === 'Approved');
+  const denied = data.filter(r => r.status === 'Denied').length;
+
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-claimed').textContent = fmt$(totalClaimed);
+  document.getElementById('kpi-recovered').textContent = fmt$(totalAppr);
+  document.getElementById('kpi-rate').textContent = fmtPct(totalAppr, totalClaimed);
+  document.getElementById('kpi-open').textContent = openRCs.length;
+  document.getElementById('kpi-denied').textContent = denied;
+  document.getElementById('filter-count').textContent = `Showing ${total} of ${RAW_DATA.length} records`;
+
+  renderStatusChart(data);
+  renderMonthlyChart(data);
+  renderCarrierChart(data);
+  renderIssueChart(data);
+  renderCustomerChart(data);
+  renderCarrierTable(data);
+  renderIssueTable(data);
+  renderOpenTable(openRCs);
+  renderAllTable(data);
+
+  document.getElementById('open-count').textContent = openRCs.length;
+  document.getElementById('all-count').textContent = total;
+}
+
+// ---- CHART: Status donut ----
+function renderStatusChart(data) {
+  destroyChart('status');
+  const statuses = ['Collected','Approved','Denied','Pending'];
+  const counts = statuses.map(s => data.filter(r => r.status === s).length);
+  const ctx = document.getElementById('chart-status').getContext('2d');
+  charts['status'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: statuses,
+      datasets: [{
+        data: counts,
+        backgroundColor: statuses.map(s => STATUS_COLORS[s]),
+        borderColor: statuses.map(s => STATUS_BORDER[s]),
+        borderWidth: 2, hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { font: { family: 'Arial', size: 11 }, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pct = (ctx.parsed / data.length * 100).toFixed(1);
+              return ` ${ctx.parsed} RCs (${pct}%)`;
+            }
+          }
+        }
+      },
+      cutout: '60%'
+    }
+  });
+}
+
+// ---- CHART: Monthly trend ----
+function renderMonthlyChart(data) {
+  destroyChart('monthly');
+  // Build month-year keys
+  const keys = {};
+  data.forEach(r => {
+    if (!r.year || !r.month) return;
+    const k = `${r.year}-${String(r.month).padStart(2,'0')}`;
+    if (!keys[k]) keys[k] = { claimed: 0, recovered: 0, label: `${MONTH_NAMES[r.month-1]} ${r.year}` };
+    keys[k].claimed += r.original || 0;
+    if (r.status === 'Collected' || r.status === 'Approved') keys[k].recovered += r.approved || 0;
+  });
+  const sorted = Object.entries(keys).sort(([a],[b]) => a.localeCompare(b));
+  const labels = sorted.map(([,v]) => v.label);
+  const claimed = sorted.map(([,v]) => v.claimed);
+  const recovered = sorted.map(([,v]) => v.recovered);
+
+  const ctx = document.getElementById('chart-monthly').getContext('2d');
+  charts['monthly'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '$ Claimed', data: claimed, backgroundColor: 'rgba(197,90,17,0.7)', borderColor: '#C55A11', borderWidth: 1.5, borderRadius: 4 },
+        { label: '$ Collected/Approved', data: recovered, backgroundColor: 'rgba(55,86,35,0.7)', borderColor: '#375623', borderWidth: 1.5, borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { font: { family: 'Arial', size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ` ${fmt$(ctx.parsed.y)}` } }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: { ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v), font: { size: 10 } }, grid: { color: '#EBF3FA' } }
+      }
+    }
+  });
+}
+
+// ---- CHART: Carrier bar ----
+function renderCarrierChart(data) {
+  destroyChart('carrier');
+  const agg = groupBy(data, 'carrier').sort((a,b) => b.orig - a.orig).slice(0, 8);
+  const ctx = document.getElementById('chart-carrier').getContext('2d');
+  charts['carrier'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: agg.map(a => a.key),
+      datasets: [
+        { label: '$ Claimed', data: agg.map(a => a.orig), backgroundColor: 'rgba(46,117,182,0.75)', borderColor: '#2E75B6', borderWidth: 1.5, borderRadius: 4 },
+        { label: '$ Approved', data: agg.map(a => a.appr), backgroundColor: 'rgba(55,86,35,0.6)', borderColor: '#375623', borderWidth: 1.5, borderRadius: 4 }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { font: { family: 'Arial', size: 10 } } },
+        tooltip: { callbacks: { label: ctx => ` ${fmt$(ctx.parsed.x)}` } }
+      },
+      scales: {
+        x: { ticks: { callback: v => '$' + (v>=1000?(v/1000).toFixed(0)+'k':v), font: { size: 9 } }, grid: { color: '#EBF3FA' } },
+        y: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ---- CHART: Issue bar ----
+function renderIssueChart(data) {
+  destroyChart('issue');
+  const agg = groupBy(data, 'issue').sort((a,b) => b.count - a.count).slice(0, 10);
+  const palette = ['#2E75B6','#375623','#C55A11','#7030A0','#C00000','#0070C0','#5A7FA8','#BDD7EE','#FCE4D6','#E2EFDA'];
+  const ctx = document.getElementById('chart-issue').getContext('2d');
+  charts['issue'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: agg.map(a => a.key),
+      datasets: [{
+        label: '# RCs',
+        data: agg.map(a => a.count),
+        backgroundColor: agg.map((_, i) => palette[i % palette.length] + 'CC'),
+        borderColor: agg.map((_, i) => palette[i % palette.length]),
+        borderWidth: 1.5, borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x} RCs` } } },
+      scales: {
+        x: { ticks: { font: { size: 9 } }, grid: { color: '#EBF3FA' } },
+        y: { ticks: { font: { size: 9 } } }
+      }
+    }
+  });
+}
+
+// ---- CHART: Customer bar ----
+function renderCustomerChart(data) {
+  destroyChart('customer');
+  const agg = groupBy(data, 'customer').sort((a,b) => b.count - a.count).slice(0, 8);
+  const ctx = document.getElementById('chart-customer').getContext('2d');
+  charts['customer'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: agg.map(a => a.key),
+      datasets: [{
+        label: '# RCs',
+        data: agg.map(a => a.count),
+        backgroundColor: 'rgba(112,48,160,0.7)', borderColor: '#7030A0', borderWidth: 1.5, borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x} RCs` } } },
+      scales: {
+        x: { ticks: { font: { size: 9 } }, grid: { color: '#EBF3FA' } },
+        y: { ticks: { font: { size: 9 } } }
+      }
+    }
+  });
+}
+
+// ---- TABLE: Carrier summary ----
+function renderCarrierTable(data) {
+  const agg = groupBy(data, 'carrier').sort((a,b) => b.orig - a.orig);
+  const tbody = document.querySelector('#tbl-carrier tbody');
+  tbody.innerHTML = agg.map(r => `
+    <tr>
+      <td>${r.key}</td>
+      <td class="ctr">${r.count}</td>
+      <td class="amt">${fmt$(r.orig)}</td>
+      <td class="amt">${fmt$(r.appr)}</td>
+      <td class="ctr">${fmtPct(r.appr, r.orig)}</td>
+    </tr>`).join('');
+}
+
+// ---- TABLE: Issue summary ----
+function renderIssueTable(data) {
+  const agg = groupBy(data, 'issue').sort((a,b) => b.orig - a.orig);
+  const tbody = document.querySelector('#tbl-issue tbody');
+  tbody.innerHTML = agg.map(r => `
+    <tr>
+      <td>${r.key}</td>
+      <td class="ctr">${r.count}</td>
+      <td class="amt">${fmt$(r.orig)}</td>
+      <td class="amt">${fmt$(r.appr)}</td>
+      <td class="ctr">${fmtPct(r.appr, r.orig)}</td>
+    </tr>`).join('');
+}
+
+// ---- TABLE: Open RCs ----
+function renderOpenTable(data) {
+  const tbody = document.querySelector('#tbl-open tbody');
+  const sorted = [...data].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  tbody.innerHTML = sorted.map(r => `
+    <tr>
+      <td><strong>${r.rc}</strong></td>
+      <td class="ctr">${fmtDate(r.date)}</td>
+      <td>${r.customer}</td>
+      <td>${r.carrier}</td>
+      <td>${r.issue}</td>
+      <td class="amt">${fmt$(r.original)}</td>
+      <td class="amt">${r.approved ? fmt$(r.approved) : '—'}</td>
+      <td class="ctr"><span class="status-pill status-${r.status}">${r.status}</span></td>
+      <td class="comment-cell">${r.comment || ''}</td>
+    </tr>`).join('');
+}
+
+// ---- TABLE: All RCs ----
+function renderAllTable(data) {
+  const tbody = document.querySelector('#tbl-all tbody');
+  const sorted = [...data].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  tbody.innerHTML = sorted.map(r => `
+    <tr>
+      <td><strong>${r.rc}</strong></td>
+      <td class="ctr">${fmtDate(r.date)}</td>
+      <td>${r.customer}</td>
+      <td>${r.carrier}</td>
+      <td>${r.issue}</td>
+      <td class="amt">${fmt$(r.original)}</td>
+      <td class="amt">${r.approved ? fmt$(r.approved) : '—'}</td>
+      <td class="ctr"><span class="status-pill status-${r.status}">${r.status}</span></td>
+      <td class="comment-cell">${r.comment || ''}</td>
+    </tr>`).join('');
+}
+
+// ---- INIT ----
+document.addEventListener('DOMContentLoaded', () => {
+  populateFilters();
+  update();
+});
+</script>
+</body>
+</html>
